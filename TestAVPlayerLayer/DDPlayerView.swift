@@ -13,9 +13,11 @@ class DDPlayerView: UIView {
     private let bottomBar = UIView()
     private let playButton = UIButton()
     private var ddSuperView : UIView?
+    private var frameInDDSuperView : CGRect?
     private let slider = UISlider()
     private var currentItemTotalTime : Double = 0
     private var indicatorView = UIActivityIndicatorView.init(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
+    private let fullScreenButton = UIButton()
     //"http://devimages.apple.com/iphone/samples/bipbop/gear1/prog_index.m3u8"
     
     override func removeFromSuperview() {
@@ -28,29 +30,85 @@ class DDPlayerView: UIView {
     }
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.backgroundColor = UIColor.orange
+        self.backgroundColor = UIColor.black
         addToWindow()
-        configControlViews()
+        _addsubViews()
     }
-    func configControlViews() {
+    func _addsubViews()  {
+        
         self.addSubview(bottomBar)
         bottomBar.addSubview(playButton)
         bottomBar.addSubview(slider)
+        bottomBar.addSubview(fullScreenButton)
         slider.addTarget(self , action: #selector(sliderChanged(sender:)), for: UIControlEvents.valueChanged)
-        bottomBar.backgroundColor = UIColor.white.withAlphaComponent(0.3)
-        bottomBar.frame = CGRect(x: 0, y: self.bounds.height - 40, width: self.bounds.width, height: 40)
-        playButton.frame = CGRect(x: 0, y: 0,width: 40, height: 40)
-        let sliderLeftRightMargin : CGFloat = 10
-        slider.bounds =  CGRect(x: 0, y: 0,width: self.bounds.width - (playButton.frame.maxX + sliderLeftRightMargin * 2), height: 40)
-        slider.center = CGPoint(x:self.bounds.width/2 + playButton.bounds.maxX/2 , y : bottomBar.bounds.height/2)
+        fullScreenButton.setTitle("全屏", for: UIControlState.normal)
+        fullScreenButton.setTitle("小屏", for: UIControlState.selected)
         playButton.setTitle("播放", for: UIControlState.normal)
         playButton.setTitle("暂停", for: UIControlState.selected)
         playButton.addTarget(self , action: #selector(playButtonAction(sender:)), for: UIControlEvents.touchUpInside)
-        print("size : \(playerLayer?.player?.currentItem?.presentationSize)")
+        bottomBar.backgroundColor = UIColor.white.withAlphaComponent(0.3)
+        fullScreenButton.addTarget(self , action: #selector(fullScreenButtonAction(sender:)), for: UIControlEvents.touchUpInside)
         self.addSubview(indicatorView)
         indicatorView.hidesWhenStopped = true
-        indicatorView.center = self.center
         indicatorView.activityIndicatorViewStyle = .white
+        configControlViews()
+    }
+    func configControlViews() {
+        bottomBar.frame = CGRect(x: 0, y: self.bounds.height - 40, width: self.bounds.width, height: 40)
+        playButton.frame = CGRect(x: 0, y: 0,width: 40, height: 40)
+        fullScreenButton.frame = CGRect(x: bottomBar.bounds.width - 44, y: 0,width: 40, height: 40)
+        let sliderLeftRightMargin : CGFloat = 10
+        slider.bounds =  CGRect(x: 0, y: 0,width: self.bounds.width - (fullScreenButton.frame.width + playButton.frame.maxX + sliderLeftRightMargin * 2), height: 40)
+        slider.center = CGPoint(x:self.bounds.width/2  , y : bottomBar.bounds.height/2)
+        print("size : \(playerLayer?.player?.currentItem?.presentationSize)")
+        indicatorView.center = self.center
+        self.layoutIfNeeded()
+        self.setNeedsLayout()
+    }
+    @objc func fullScreenButtonAction(sender:UIButton){
+        sender.isSelected = !sender.isSelected
+        if sender.isSelected{//全屏
+            if let window = UIApplication.shared.keyWindow{
+                window.addSubview(self)
+                UIView.animate(withDuration: 0.25) {
+                    self.bounds = CGRect(x: 0, y: 0, width: window.bounds.height, height: window.bounds.width)
+                    self.center = CGPoint(x: window.bounds.width/2, y: window.bounds.height/2)
+                    
+                    self.transform = CGAffineTransform.init(rotationAngle: CGFloat(Double.pi/2))
+                }
+                self.playerLayer?.frame = self.bounds
+                self.configControlViews()
+                if let size = playerLayer?.player?.currentItem?.presentationSize , size != CGSize.zero{
+                    var realH = self.bounds.width * size.height / size.width
+                    if realH > self.bounds.height {//以宽为标准
+                        realH = self.bounds.height
+                    }
+                    self.bottomBar.frame = CGRect(x: 0, y: self.bounds.height / 2 + realH / 2 - 40, width: self.bounds.width, height: 40)
+                    self.bringSubview(toFront: self.bottomBar)
+                }
+                window.bringSubview(toFront: self)
+                print("/////////////")
+                print(self.frame)
+                print(self.bottomBar.frame)
+            }
+        }else{//小屏
+            if let _superView = ddSuperView{
+                _superView.addSubview(self)
+                UIView.animate(withDuration: 0.25) {
+                    self.transform = CGAffineTransform.identity
+                    self.frame = self.frameInDDSuperView ?? CGRect.zero
+                    self.playerLayer?.frame = self.bounds
+                    
+                }
+                self.configControlViews()
+                if let size = playerLayer?.player?.currentItem?.presentationSize , size != CGSize.zero{
+                    var realH = self.bounds.width * size.height / size.width
+                    if realH > self.bounds.height {realH = self.bounds.height}
+                    self.bottomBar.frame = CGRect(x: 0, y: self.bounds.height / 2 + realH / 2 - 40, width: self.bounds.width, height: 40)
+                    self.bringSubview(toFront: self.bottomBar)
+                }
+            }
+        }
     }
     @objc func sliderChanged(sender:UISlider){
         print(sender.value)
@@ -97,6 +155,7 @@ class DDPlayerView: UIView {
     convenience init(frame:CGRect  , superView:UIView? = nil,urlStr : String ){
         self.init(frame: frame)
         ddSuperView = superView
+        frameInDDSuperView = frame
         self.addToSuperView()
         if let url = URL(string: urlStr){
             let playItem = AVPlayerItem.init(url: url)
@@ -117,7 +176,6 @@ class DDPlayerView: UIView {
         playerLayer?.player?.addObserver(self , forKeyPath: "timeControlStatus", options: NSKeyValueObservingOptions.new, context: nil )
 
     }
-    
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
         if keyPath ?? "" == "status"{
             if let statusRewValue = change?[NSKeyValueChangeKey.newKey] as? Int{
@@ -140,10 +198,12 @@ class DDPlayerView: UIView {
                         }
                         ///config control compnents
                         if let size = playerLayer?.player?.currentItem?.presentationSize , size != CGSize.zero{
-                            let realH = self.bounds.width * size.height / size.width
+                            var realH = self.bounds.width * size.height / size.width
+                            if realH > self.bounds.height {realH = self.bounds.height}
                             self.bottomBar.frame = CGRect(x: 0, y: self.bounds.height / 2 + realH / 2 - 40, width: self.bounds.width, height: 40)
                             self.bringSubview(toFront: self.bottomBar)
                         }
+                        self.configControlViews()
                         break
                     case .unknown:
                         print("未知")

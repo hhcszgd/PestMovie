@@ -22,7 +22,8 @@ class ViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         let url = "http://devimages.apple.com/iphone/samples/bipbop/gear1/prog_index.m3u8"
-       self.playerLayer =  DDPlayerView.init(frame: self.view.bounds, superView: self.view , urlStr: url)
+        let rect = CGRect(x: 44, y: 100, width: 200, height: 300)
+       self.playerLayer =  DDPlayerView.init(frame: rect, superView: self.view , urlStr: url)
     }
 
 }
