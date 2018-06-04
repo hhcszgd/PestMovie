@@ -16,10 +16,12 @@ class DDPlayerView: UIView {
     private var currentItemTotalTime : Double = 0
     private var indicatorView = UIActivityIndicatorView.init(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
     private var tapCount : Int = 0
+    private var isBuffering : Bool = false
     override func removeFromSuperview() {
         super.removeFromSuperview()
         self.playerLayer?.player?.pause()
         self.playerLayer = nil
+
     }
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -69,6 +71,10 @@ class DDPlayerView: UIView {
             ddsuperView.addSubview(self )
         }
     }
+    deinit {
+        removePlayerObserver()
+    }
+
     convenience init(frame:CGRect  , superView:UIView? = nil,urlStr : String ){
         self.init(frame: frame)
         ddSuperView = superView
@@ -82,11 +88,33 @@ class DDPlayerView: UIView {
             self.configPlayer()
         }
     }
-    
+    func removePlayerObserver() {
+        
+        playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "status")
+        if #available(iOS 10.0, *) {
+            playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "timeControlStatus")
+        }else{
+            playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "rate")
+            playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "playbackBufferEmpty")
+            playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "playbackLikelyToKeepUp")
+        }
+    }
     func addPlayerObserver()  {
         playerLayer?.player?.currentItem?.addObserver(self , forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil )
 //        playerLayer?.player?.addObserver(self , forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil )
-        playerLayer?.player?.addObserver(self , forKeyPath: "timeControlStatus", options: NSKeyValueObservingOptions.new, context: nil )
+        
+        if #available(iOS 10.0, *) {
+            
+//            playerLayer?.player?.addObserver(self , forKeyPath: "timeControlStatus", options: NSKeyValueObservingOptions.new, context: nil )
+//        }else{
+            
+            playerLayer?.player?.addObserver(self , forKeyPath: "rate", options: NSKeyValueObservingOptions.new, context: nil )
+            
+            playerLayer?.player?.currentItem?.addObserver(self , forKeyPath: "playbackBufferEmpty", options: NSKeyValueObservingOptions.new, context: nil )//缓冲中
+            playerLayer?.player?.currentItem?.addObserver(self , forKeyPath: "playbackLikelyToKeepUp", options: NSKeyValueObservingOptions.new, context: nil )//缓冲完毕
+            
+        }
+        
     }
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
         if keyPath ?? "" == "status"{
@@ -98,6 +126,8 @@ class DDPlayerView: UIView {
                         break
                     case .readyToPlay:
                         print("准备播放")
+                        isBuffering = false
+                        indicatorView.stopAnimating()
                         self.bottomBar.isHidden = false
                         if let duration = self.playerLayer?.player?.currentItem?.duration {
                             let seconds = duration.seconds
@@ -108,6 +138,7 @@ class DDPlayerView: UIView {
                         }
                         let value = Float((self.playerLayer?.player?.currentItem?.currentTime() ?? kCMTimeZero).seconds)
                         self.bottomBar.configSliderValue(value:value)
+                        self.bringSubview(toFront: bottomBar)
                         layoutIfNeeded()
                         setNeedsLayout()
                         break
@@ -119,42 +150,85 @@ class DDPlayerView: UIView {
             }
         }else if keyPath ?? "" == "timeControlStatus"{
             if let statusRewValue = change?[NSKeyValueChangeKey.newKey] as? Int{
-                if let status  = AVPlayerTimeControlStatus.init(rawValue: statusRewValue){
-                    switch status{
-                    case .paused:
-                        print("暂停")//更新播放按钮
-                        if let currentTime =  self.playerLayer?.player?.currentItem?.currentTime() {
-                            if Int(currentItemTotalTime) == Int(currentTime.seconds) && currentItemTotalTime != 0{//播放完毕
-                                ///重置界面到初始状态
-                                self.bottomBar.configUIWhenPlayEnd()
-                                self.playerLayer?.player?.currentItem?.seek(to: kCMTimeZero, completionHandler: nil )
-                                currentItemTotalTime = 0
-                            }else{//暂停
-                                self.bottomBar.configUIWhenPause()
-                            }
-                        }
-                    case .playing:
-                        print("播放中")//取消转圈并播放,更新播放按钮
-                        self.bottomBar.configUIWhenPlaying()
-                        indicatorView.stopAnimating()
-                        break
-                    case .waitingToPlayAtSpecifiedRate:
-                        print("等待 到特定的比率去播放")//
+                configControlBar(statusRewValue:statusRewValue)
+            }
+        }else if keyPath ?? "" == "rate"{
+            print("--->\(#line) ::: \(self.playerLayer?.player?.rate)")
+            if self.playerLayer?.player?.rate ?? 0 == 0.0 {//暂停
+                if let currentTime =  self.playerLayer?.player?.currentItem?.currentTime() {
+                    if Int(currentItemTotalTime) == Int(currentTime.seconds) && currentItemTotalTime != 0{//播放完毕
+                        ///重置界面到初始状态
+                        self.bottomBar.configUIWhenPlayEnd()
+                        self.playerLayer?.player?.currentItem?.seek(to: kCMTimeZero, completionHandler: nil )
+                        currentItemTotalTime = 0
+                    }else{//暂停
                         self.bottomBar.configUIWhenPause()
-                        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+                    }
+                }
+            }else if self.playerLayer?.player?.rate ?? 0 == 1.0 {//播放
+                self.bottomBar.configUIWhenPlaying()
+                indicatorView.stopAnimating()
+            }
+        }else if keyPath ?? "" == "playbackBufferEmpty"{
+            print("--->\(#line) ::: stop ?")
+            isBuffering = true
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 2) {
+                    if self.isBuffering{//执行转圈, 更新播放按钮
+                        self.indicatorView.startAnimating()
+                        self.bringSubview(toFront: self.indicatorView)
+                    }
+            }
+        }else if keyPath ?? "" == "playbackLikelyToKeepUp"{
+            print("--->\(#line) ::: continue ?")
+            isBuffering = false
+            self.indicatorView.stopAnimating()
+            
+        } else{super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)}
+        
+    }
+    
+    func configControlBar(statusRewValue:Int?){//AVPlayerTimeControlStatus不兼容ios9
+        if #available(iOS 10.0, *) {
+            if let status  = AVPlayerTimeControlStatus.init(rawValue: statusRewValue ?? 0){
+                switch status{
+                case .paused:
+                    print("暂停")//更新播放按钮
+                    if let currentTime =  self.playerLayer?.player?.currentItem?.currentTime() {
+                        if Int(currentItemTotalTime) == Int(currentTime.seconds) && currentItemTotalTime != 0{//播放完毕
+                            ///重置界面到初始状态
+                            self.bottomBar.configUIWhenPlayEnd()
+                            self.playerLayer?.player?.currentItem?.seek(to: kCMTimeZero, completionHandler: nil )
+                            currentItemTotalTime = 0
+                        }else{//暂停
+                            self.bottomBar.configUIWhenPause()
+                        }
+                    }
+                case .playing:
+                    print("播放中")//取消转圈并播放,更新播放按钮
+                    self.bottomBar.configUIWhenPlaying()
+                    indicatorView.stopAnimating()
+                    break
+                case .waitingToPlayAtSpecifiedRate:
+                    print("等待 到特定的比率去播放")//
+                    self.bottomBar.configUIWhenPause()
+                    DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+                        if #available(iOS 10.0, *) {
                             if let tempStatus = self.playerLayer?.player?.timeControlStatus , tempStatus == .waitingToPlayAtSpecifiedRate{//执行转圈, 更新播放按钮
                                 self.indicatorView.startAnimating()
                                 self.bringSubview(toFront: self.indicatorView)
                             }
+                        } else {
+                            // Fallback on earlier versions
                         }
-                        break
                     }
+                    break
                 }
             }
+        }else{
+            
         }
-        else{super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)}
-        
     }
+    
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesBegan(touches, with: event)
         print("touches")
@@ -185,7 +259,7 @@ class DDPlayerView: UIView {
                 [weak self] time in
                 // update player transport UI
                 print("\(#line)")
-                
+                if let isAnimating = self?.indicatorView.isAnimating , isAnimating  {self?.indicatorView.stopAnimating()}
                 let value = Float((self?.playerLayer?.player?.currentItem?.currentTime() ?? kCMTimeZero).seconds)
                 self?.bottomBar.configSliderValue(value:value)
                 
