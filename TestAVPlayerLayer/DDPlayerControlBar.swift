@@ -101,13 +101,14 @@ class DDPlayerControlBar: UIView {
             hasPlayedTimeLabel.sizeToFit()
             leftTimeLabel.sizeToFit()
             hasPlayedTimeLabel.frame = CGRect(x: playButton.frame.maxX + buttonToBorder, y: buttonY,width: hasPlayedTimeLabel.bounds.width, height: buttonH)
-            leftTimeLabel.frame = CGRect(x: fullScreenButton.frame.minX - (buttonToScreen + buttonH), y: buttonY,width: leftTimeLabel.bounds.width, height: buttonH)
+            leftTimeLabel.frame = CGRect(x: fullScreenButton.frame.minX - (buttonToScreen + leftTimeLabel.bounds.width), y: buttonY,width: leftTimeLabel.bounds.width, height: buttonH)
             fullScreenTimeLabel.isHidden = true
             hasPlayedTimeLabel.isHidden = false
             leftTimeLabel.isHidden = false
             let sliderLeftRightMargin : CGFloat = 10
-            slider.bounds =  CGRect(x: 0, y: 0,width: leftTimeLabel.frame.minX - (hasPlayedTimeLabel.frame.maxX + sliderLeftRightMargin * 2), height: 40)
-            slider.center = CGPoint(x:self.bounds.width/2  , y : self.bounds.height/2)
+            let sliderH : CGFloat = 26
+            slider.frame =  CGRect(x: hasPlayedTimeLabel.frame.maxX + sliderLeftRightMargin, y: self.bounds.height/2 - sliderH/2,width: leftTimeLabel.frame.minX - (hasPlayedTimeLabel.frame.maxX + sliderLeftRightMargin * 2), height: sliderH)
+//            slider.center = CGPoint(x:self.bounds.width/2  , y : self.bounds.height/2)
             
         case .fullScreen:
             fullScreenTimeLabel.isHidden = false
