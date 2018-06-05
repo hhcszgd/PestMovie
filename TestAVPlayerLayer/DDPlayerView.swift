@@ -17,6 +17,9 @@ class DDPlayerView: UIView {
     private var indicatorView = UIActivityIndicatorView.init(frame: CGRect(x: 0, y: 0, width: 44, height: 44))
     private var tapCount : Int = 0
     private var isBuffering : Bool = false
+    var currentUrl : String?
+    
+    private var needRemoveObserver : Bool = false
     override func removeFromSuperview() {
         super.removeFromSuperview()
         self.playerLayer?.player?.pause()
@@ -77,6 +80,7 @@ class DDPlayerView: UIView {
 
     convenience init(frame:CGRect  , superView:UIView? = nil,urlStr : String ){
         self.init(frame: frame)
+        currentUrl = urlStr
         ddSuperView = superView
         frameInDDSuperView = frame
         self.addToSuperView()
@@ -88,25 +92,44 @@ class DDPlayerView: UIView {
             self.configPlayer()
         }
     }
-    func removePlayerObserver() {
+    ///the only way to set movie url
+    func replaceCurrentMovieItemWith(urlStr:String) {
+        if let url = URL(string: urlStr){
+            currentUrl = urlStr
+            if needRemoveObserver{
+                self.removePlayerObserver()
+            }
+            let item = AVPlayerItem.init(url: url)
+            
+            self.playerLayer?.player?.replaceCurrentItem(with: item)
+            self.playerLayer?.player?.pause()
+            self.bottomBar.configUIWhenPlayEnd()
+            self.playerLayer?.player?.currentItem?.seek(to: kCMTimeZero, completionHandler: nil )
+            self.addPlayerObserver()
+            currentItemTotalTime = 0
+            
+        }
+    }
+    func removePlayerObserver() {//在更新item的地方移除通知再添加
         
         playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "status")
         if #available(iOS 10.0, *) {
-            playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "timeControlStatus")
+            playerLayer?.player?.removeObserver(self , forKeyPath: "timeControlStatus")
         }else{
-            playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "rate")
+            playerLayer?.player?.removeObserver(self , forKeyPath: "rate")
             playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "playbackBufferEmpty")
             playerLayer?.player?.currentItem?.removeObserver(self , forKeyPath: "playbackLikelyToKeepUp")
         }
     }
+    
     func addPlayerObserver()  {
+        needRemoveObserver = true
         playerLayer?.player?.currentItem?.addObserver(self , forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil )
-//        playerLayer?.player?.addObserver(self , forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil )
+        //        playerLayer?.player?.addObserver(self , forKeyPath: "status", options: NSKeyValueObservingOptions.new, context: nil )
         
         if #available(iOS 10.0, *) {
-            
-//            playerLayer?.player?.addObserver(self , forKeyPath: "timeControlStatus", options: NSKeyValueObservingOptions.new, context: nil )
-//        }else{
+            playerLayer?.player?.addObserver(self , forKeyPath: "timeControlStatus", options: NSKeyValueObservingOptions.new, context: nil )
+        }else{
             
             playerLayer?.player?.addObserver(self , forKeyPath: "rate", options: NSKeyValueObservingOptions.new, context: nil )
             
