@@ -205,7 +205,10 @@ class DDPlayerView: UIView {
             print("--->\(#line) ::: continue ?")
             isBuffering = false
             self.indicatorView.stopAnimating()
-            
+            if let duration = self.playerLayer?.player?.currentItem?.duration {
+                let seconds = duration.seconds
+                currentItemTotalTime = seconds
+            }
         } else{super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)}
         
     }
@@ -217,7 +220,7 @@ class DDPlayerView: UIView {
                 case .paused:
                     print("暂停")//更新播放按钮
                     if let currentTime =  self.playerLayer?.player?.currentItem?.currentTime() {
-                        if Int(currentItemTotalTime) == Int(currentTime.seconds) && currentItemTotalTime != 0{//播放完毕
+                        if currentItemTotalTime - currentTime.seconds < 1 && currentItemTotalTime != 0{//播放完毕
                             ///重置界面到初始状态
                             self.bottomBar.configUIWhenPlayEnd()
                             self.playerLayer?.player?.currentItem?.seek(to: kCMTimeZero, completionHandler: nil )
@@ -230,6 +233,10 @@ class DDPlayerView: UIView {
                     print("播放中")//取消转圈并播放,更新播放按钮
                     self.bottomBar.configUIWhenPlaying()
                     indicatorView.stopAnimating()
+                    if let duration = self.playerLayer?.player?.currentItem?.duration {
+                        let seconds = duration.seconds
+                        currentItemTotalTime = seconds
+                    }
                     break
                 case .waitingToPlayAtSpecifiedRate:
                     print("等待 到特定的比率去播放")//
@@ -359,6 +366,17 @@ extension DDPlayerView : DDPlayerControlDelegate{
     
     func pressToPlay() {
         self.playerLayer?.player?.play()
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+            if #available(iOS 10.0, *) {
+                if self.playerLayer?.player?.timeControlStatus == .waitingToPlayAtSpecifiedRate{
+                    
+                }
+            } else {
+                if self.playerLayer?.player?.rate == 0.0{
+                    self.indicatorView.startAnimating()
+                }
+            }
+        }
     }
     
     func pressToPause() {
